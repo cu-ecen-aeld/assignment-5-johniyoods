@@ -16,6 +16,29 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
+    int ret;
+
+    // Execute the command using system()
+    ret = system(cmd);
+
+    // Check if the system() call succeeded
+    if (ret == -1) {
+        perror("Error: system() call failed");
+        return false;
+    }
+
+    // Handle the return value from the command
+    if (WIFEXITED(ret)) {
+        int exit_status = WEXITSTATUS(ret);
+        printf("Command executed successfully with exit status: %d\n", exit_status);
+        if (exit_status != 0) {
+            printf("Command returned a non-zero exit status, indicating an error.\n");
+        }
+    } else if (WIFSIGNALED(ret)) {
+        printf("Command terminated by signal: %d\n", WTERMSIG(ret));
+    } else {
+        printf("Command did not terminate normally.\n");
+    }
 
     return true;
 }
@@ -58,9 +81,35 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
-
     va_end(args);
 
+    pid_t pid = fork();
+    if (pid < 0) {
+        // Fork failed
+        perror("Error: fork() failed");
+        return false;
+    } else if (pid == 0) {
+        // Child process: Execute the command
+        if (execv(command[0], command) == -1) {
+            perror("Error: execv() failed");
+            exit(EXIT_FAILURE); // Exit child process with failure
+        }
+    } else {
+        // Parent process: Wait for the child process to finish
+        int status;
+        if (waitpid(pid, &status, 0) == -1) {
+            perror("Error: waitpid() failed");
+            return false;
+        }
+
+        // Check the exit status of the child process
+        if (WIFEXITED(status)) {
+            int exit_status = WEXITSTATUS(status);
+            return exit_status == 0; // Return true if the command succeeded
+        } else {
+            return false; // Command did not terminate normally
+        }
+    }
     return true;
 }
 
@@ -95,5 +144,48 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
 
     va_end(args);
 
+        pid_t pid = fork();
+    if (pid < 0) {
+        // Fork failed
+        perror("Error: fork() failed");
+        return false;
+    } else if (pid == 0) {
+        // Child process: Redirect standard output to the file
+        int fd = open(outputfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd < 0) {
+            perror("Error: open() failed");
+            exit(EXIT_FAILURE); // Exit child process with failure
+        }
+
+        // Redirect stdout to the file
+        if (dup2(fd, STDOUT_FILENO) < 0) {
+            perror("Error: dup2() failed");
+            close(fd);
+            exit(EXIT_FAILURE); // Exit child process with failure
+        }
+
+        close(fd); // Close the file descriptor as it's no longer needed
+
+        // Execute the command
+        if (execv(command[0], command) == -1) {
+            perror("Error: execv() failed");
+            exit(EXIT_FAILURE); // Exit child process with failure
+        }
+    } else {
+        // Parent process: Wait for the child process to finish
+        int status;
+        if (waitpid(pid, &status, 0) == -1) {
+            perror("Error: waitpid() failed");
+            return false;
+        }
+
+        // Check the exit status of the child process
+        if (WIFEXITED(status)) {
+            int exit_status = WEXITSTATUS(status);
+            return exit_status == 0; // Return true if the command succeeded
+        } else {
+            return false; // Command did not terminate normally
+        }
+    }
     return true;
 }
