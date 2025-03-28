@@ -3,7 +3,7 @@
 #Author: Siddhant Jajoo
 
 source shared.sh
-
+export FORCE_UNSAFE_CONFIGURE=1
 EXTERNAL_REL_BUILDROOT=../base_external
 git submodule init
 git submodule sync
